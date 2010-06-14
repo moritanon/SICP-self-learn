@@ -1,8 +1,8 @@
 (use gauche.test)
 (test-start "metalinuistic.scm")
 
-(require "./metalinguistic.scm")
-;;(load "./metalinguistic.scm")
+;;(require "./metalinguistic.scm")
+(load "./metalinguistic.scm")
 
 (test* "eval-1" 1 (eval '1 '()))
 (test* "self-evaluating1" #t (self-evaluating? 1))
@@ -30,6 +30,7 @@
 (test* "definition? 2" #f (definition? '(a b c)))
 
 (test* "definition-variable 1" 'a (definition-variable '(define a 10)))
+(test* "definition-variable 2" 'a (definition-variable '(define (a x) (* x x))))
 (test* "definition-value 1" 10 (definition-value '(define a 10)))
 
 (test* "make-definitaion 1" '(define a 10) (make-definition 'a 10))
@@ -43,6 +44,11 @@
        (make-lambda '(a b c) '((+ a b c))))
 (test* "make-lambda 2" '(lambda (a b c) . 1)
        (make-lambda '(a b c) 1))
+
+(test* "definition-value 1" '(lambda (x) (* x x))
+       (definition-value '(define (a x) (* x x))))
+
+
 
 (test* "if? 1" #t (if? '(if a b c)))
 (test* "if-predicate 1" 'a (if-predicate '(if  a b c)))
@@ -76,7 +82,7 @@
 (test* "no-operands? 2" #t (no-operands? '()))
 
 (test* "first-operand 1" 'a (first-operand '(a b)))
-(test* "rest-operand 1" '(b) (rest-operand '(a b)))
+(test* "rest-operands 1" '(b) (rest-operands '(a b)))
 
 ;; cond
 (test* "cond? 1" #t (cond? '(cond ((= a b) #t))))
@@ -148,8 +154,8 @@
 		
 
 
-(test* "let-params->var-val-list 1"
-       (values-ref (values '(a) '(2)) 0)
+(test* "let-params->var-val-list 1" '(a)
+       (values-ref (values '(a) '(2)) 0))
        
 (test* "let-params->var-val-list 2" 
        (call-with-values (lambda () (values '(a b) '(1 2))) list)
@@ -190,7 +196,8 @@
 (test* "make-frame 1" '((a b c) . (1 2 3))
        (make-frame '(a b c) '(1 2 3)))
 (test* "frame-variables 1" '(a b c)
-       (frame-variables '(a b c) . (1 2 3)))
+       ;;(frame-variables '((a b c) 1 2 3)))
+       (frame-variables (make-frame '(a b c) '(1 2 3))))
 
 (test* "frame-values 1" '(1 2 3) 
        (frame-values (make-frame '(a b c) '(1 2 3))))
@@ -241,4 +248,40 @@
 	 '(a b) '(9 10)
 	 (extend-environment '(x y) '(0 1) the-empty-environment))))
 
+(define abxy-env
+  (extend-environment 
+   '(a b) '(9 10)
+   (extend-environment '(x y) '(0 1) the-empty-environment)))
+
+
+(test* "set-variable-value! 1"
+       20
+       (begin 
+	 (set-variable-value! 'b 20 abxy-env)
+	 (lookup-variable-value 'b abxy-env)))
+(test* "set-variable-value! 2"
+       2
+       (begin 
+	 (set-variable-value! 'y 2 abxy-env)
+	 (lookup-variable-value 'y abxy-env)))
+(test* "set-variable-value! 1"
+       (test-error)
+       (set-variable-value! 'p 20 abxy-env))
+
+(test* "define-variable! 1"
+       1
+       (begin
+	 (define-variable! 'a 1 abxy-env)
+	 (lookup-variable-value 'a abxy-env)))
+(test* "define-variable! 2"
+       5
+       (begin
+	 (define-variable! 'd 5 abxy-env)
+	 (lookup-variable-value 'd abxy-env)))
+
+
+
+
 (test-end)
+
+(driver-loop)

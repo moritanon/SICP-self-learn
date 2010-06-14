@@ -13,7 +13,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
-    ((varable? exp) (lookup-variable-value exp env))
+    ((variable? exp) (lookup-variable-value exp env))
     ((quoted? exp) (text-of-quotation exp))
     ((assignment? exp) (eval-assignment exp env))
     ((definition? exp) (eval-definition exp env))
@@ -32,20 +32,22 @@ evalは値を得るため、環境から変数を探すひつようがある。
      (error "Unknown expression type -- EVAL" exp))))
 
 ;; apply
+;; 元々のapplyを退避
+(define apply-in-underlying-scheme apply)
 
 (define (apply procedure arguments)
   (cond ((primitive-procedure? procedure)
-     (apply-primitive-procedure procedure argments))
-    ((compound-procedure? procedure)
-     (eval-sequence
-      (procedure-body procedure)
-      (extend-environment
-       (procedure-parameters procedure)
-       arguments
-       (procedure-environment procedure))))
-    (else
-     (error
-      "Unknown procedure type -- APPLY" procedure))))
+	 (apply-primitive-procedure procedure arguments))
+	((compound-procedure? procedure)
+	 (eval-sequence
+	  (procedure-body procedure)
+	  (extend-environment
+	   (procedure-parameters procedure)
+	   arguments
+	   (procedure-environment procedure))))
+	(else
+	 (error
+	  "Unknown procedure type -- APPLY" procedure))))
 
 ;; 手続きの引数
 (define (list-of-values exps env)
@@ -73,10 +75,10 @@ evalは値を得るため、環境から変数を探すひつようがある。
                env)
   'ok)
 
-(define (eval-difinition exp env)
+(define (eval-definition exp env)
   (define-variable! (definition-variable exp)
                     (eval (definition-value exp) env)
-            env)
+		    env)
   'ok)
 
 ;;4.1
@@ -128,7 +130,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 (define (definition-variable exp)
   (if (symbol? (cadr exp))
       (cadr exp)
-      (caddr exp)))
+      (caadr exp)))
 
 (define (definition-value exp)
   (if (symbol? (cadr exp))
@@ -204,7 +206,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 
 (define (first-operand ops) (car ops))
 
-(define (rest-operand ops) (cdr ops))
+(define (rest-operands ops) (cdr ops))
 
 
 ;; cond
@@ -237,7 +239,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
   (list act predicate))
 
 
-(define *talbe* (make-hash-table 'equal?))
+(define *table* (make-hash-table 'equal?))
 
 (define (get package key)
   (hash-table-get *table* (list package key) #f))
@@ -245,16 +247,14 @@ evalは値を得るため、環境から変数を探すひつようがある。
   (hash-table-put! *table* (list package key) value))
 
 
-
-
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
-	((varable? exp) (lookup-variable-value exp env))
+	((variable? exp) (lookup-variable-value exp env))
 	(else
 	 (let ((op (get 'eval (operator exp))))
-	   (cond ((op) (op exp env))
+	   (cond (op (op exp env))
 		 ((application? exp)
-		  (apply (eval op env)
+		  (apply (eval (operator exp) env)
 			 (list-of-values (operands exp) env)))
 		 (else
 		  (error "Unknown expression type -- EVAL" exp)))))))
@@ -354,8 +354,8 @@ evalは値を得るため、環境から変数を探すひつようがある。
 
 (define (make-let var val body)
   (list 'let (list var val) body))
-;;4.7
-;;let*->nested-lets
+;; 4.7
+;; let*->nested-lets
 (define (let*? exp) (tagged-list? exp 'let*))
 
 (define (let*->nested-lets exp)
@@ -383,9 +383,10 @@ evalは値を得るため、環境から変数を探すひつようがある。
     (eval (let->combination exp) env))
   (define (eval-let* exp env)
     (eval (let*->nested-lets exp) env))
-  (put 'eval 'quote text-of-quotation)
+  (define (eval-quote exp env) (text-of-quotation exp))
+  (put 'eval 'quote eval-quote)
   (put 'eval 'set! eval-assignment)
-  (put 'eval 'define eval-difinition)
+  (put 'eval 'define eval-definition)
   (put 'eval 'if eval-if)
   (put 'eval 'lambda  eval-lambda)
   (put 'eval 'begin eval-begin)
@@ -394,6 +395,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
   (put 'eval 'and eval-and)
 )
 
+(install-eval-package)
 ;; 4-1-3
 (define (false? x)
   (eq? x #f))
@@ -410,7 +412,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
 
-(define (procedure-parameter p)
+(define (procedure-parameters p)
   (cadr p))
 
 (define (procedure-body p)
@@ -485,10 +487,79 @@ evalは値を得るため、環境から変数を探すひつようがある。
   (let ((frame (first-frame env)))
     (define (scan vars vals)
       (cond ((null? vars)
-	     (add-binding-frame! var vals frame))
+	     (add-binding-frame! var val frame))
 	    ((eq? var (car vars))
 	     (set-car! vals val))
 	    (else
 	     (scan (cdr vars) (cdr vals)))))
     (scan (frame-variables frame)
 	  (frame-values frame))))
+
+
+(define (setup-environment)
+  (let ((initial-env
+	 (extend-environment (primitive-procedure-names)
+			     (primitive-procedure-objects)
+			     the-empty-environment)))
+    (define-variable! 'true #t initial-env)
+    (define-variable! 'false #f initial-env)
+    initial-env))
+
+(define (primitive-procedure? proc)
+  (tagged-list? proc 'primitive))
+
+(define (primitive-implementation proc) (cadr proc))
+
+(define primitive-procedures
+  (list (list 'car car)
+	(list 'cdr cdr)
+	(list 'cons cons)
+	(list 'null? null?)
+	(list '= =)
+	(list 'eq? eq?)
+	(list '+ +)
+	(list '* *)
+	(list '- -)
+	(list '/ /)
+	;; ...
+	))
+
+(define (primitive-procedure-names)
+  (map car primitive-procedures))
+
+(define (primitive-procedure-objects)
+  (map (lambda (proc) (list 'primitive (cadr proc)))
+       primitive-procedures))
+
+(define (apply-primitive-procedure proc args)
+  (apply-in-underlying-scheme
+   (primitive-implementation proc) args))
+
+
+
+(define input-prompt ";;; M-Eval input:")
+(define output-prompt ";;; M-Eval value:")
+
+(define (driver-loop)
+  (prompt-for-input input-prompt)
+  (let ((input (read)))
+    (let ((output (eval input the-global-environment)))
+      (announce-output output-prompt)
+      (user-print output)))
+  (driver-loop))
+
+(define (prompt-for-input string)
+  (newline) (newline) (display string) (newline))
+(define (announce-output string)
+  (newline) (display string) (newline))
+
+(define (user-print object)
+  (if (compound-procedure? object)
+      (display (list 'compound-procedure
+		     (procedure-parameters object)
+		     (procedure-body object)
+		     '<procedure-env>))
+      (display object)))
+
+(define the-global-environment (setup-environment))
+
