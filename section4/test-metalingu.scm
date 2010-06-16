@@ -64,7 +64,7 @@
 
 (test* "first-exp 1" 'a (first-exp '(a b)))
 
-(test* "rest-exp 1" '(b) (rest-exp '(a b)))
+(test* "rest-exps 1" '(b) (rest-exps '(a b)))
 
 (test* "sequence->exp 1" '() (sequence->exp '()))
 (test* "sequence->exp 2" 'a (sequence->exp '(a)))
@@ -280,8 +280,14 @@
 	 (lookup-variable-value 'd abxy-env)))
 
 
+(test* "eval-apply1" 
+       50 
+       (begin (eval '(define b 50) the-global-environment)
+	      (eval 'b the-global-environment)))
 
-
+(test* "eval-apply2"
+       110
+       (begin (eval '(define (test a b) (+ a b)) the-global-environment)
+	      (eval '(test 10 100) the-global-environment)))
 (test-end)
-
-(driver-loop)
+;;(driver-loop)

@@ -49,6 +49,9 @@ evalは値を得るため、環境から変数を探すひつようがある。
 	 (error
 	  "Unknown procedure type -- APPLY" procedure))))
 
+;; apply がなにをするものなのか根本的に分かってない。
+;; もともとのapplyにmapを渡せないのはなぜか？ Ex4.14
+
 ;; 手続きの引数
 (define (list-of-values exps env)
   (if (no-operands? exps)
@@ -185,7 +188,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 
 (define (first-exp seq) (car seq))
 
-(define (rest-exp seq) (cdr seq))
+(define (rest-exps seq) (cdr seq))
 
 (define (sequence->exp seq)
   (cond ((null? seq) seq)
@@ -276,7 +279,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
     (cond ((false? evaled-value) 'false)
           ((last-exp? seq) evaled-value)
           (else
-           (eval-and-seq (rest-exp seq) env))))))
+           (eval-and-seq (rest-exps seq) env))))))
 
 (define (eval-and exp env)
   (eval-and-seq (and-operands exp) env))
@@ -287,7 +290,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
       (let ((evaled-value (eval (first-exp seq) env)))
     (cond ((true? evaled-value) evaled-value)
           (else
-           (eval-and-seq (rest-exp seq) env))))))
+           (eval-and-seq (rest-exps seq) env))))))
 
 
 
@@ -521,6 +524,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 	(list '* *)
 	(list '- -)
 	(list '/ /)
+	(list 'map map)
 	;; ...
 	))
 
