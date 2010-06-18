@@ -132,7 +132,7 @@
 ;; let
 (test* "let? 1" #t (let? '(let ((a 1) (b 2)) body)))
 (test* "let-params 1" '((a 1) (b 2)) (let-params '(let ((a 1) (b 2)) body)))
-(test* "let-body 1" 'body (let-body '(let ((a 1) (b 2)) body)))
+(test* "let-body 1" '(body) (let-body '(let ((a 1) (b 2)) body)))
 (test* "first-let-param 1" '(a 1) (first-let-param '((a 1) (b 2))))
 (test* "rest-let-param 1" '((b 2)) (rest-let-param '((a 1) (b 2))))
 (test* "let-param-variable 1" 'a (let-param-variable '(a 1)))
@@ -161,27 +161,29 @@
        (call-with-values (lambda () (values '(a b) '(1 2))) list)
        (call-with-values (lambda () (let-params->var-val-list '((a 1) (b 2)))) list))
 
+
+
 (test* "let->combination 1" 
-       '((lambda (a) . body) 1)
+       '((lambda (a) body) 1)
        (let->combination '(let ((a 1)) body)))
 (test* "let->combination 2"
-       '((lambda (a b) . body) 1 2)
+       '((lambda (a b) body) 1 2)
        (let->combination '(let ((a 1) (b 2)) body)))
 
 (test* "let->combination 3"
-       '((lambda () . body))
+       '((lambda () body))
        (let->combination '(let () body)))
 
 (test* "make-let 1"
-       '(let (a 1) body)
-       (make-let 'a 1 'body))
+       '(let ((a 1)) body)
+       (make-let '((a 1)) '(body)))
 
-(test* "let*->nested-lets 1"
+(test* "let*->nested-lets 2"
        '(let ((a 1))
 	  (let ((b 1))
 	    body))
        (let*->nested-lets '(let* ((a 1) (b 1)) body)))
-(test* "let*0>nested-lets 2"
+(test* "let*->nested-lets 1"
        '(let ((a 1)) body)
        (let*->nested-lets '(let* ((a 1)) body))) 
        
@@ -280,14 +282,52 @@
 	 (lookup-variable-value 'd abxy-env)))
 
 
-(test* "eval-apply1" 
+(test* "eval-apply1 define" 
        50 
        (begin (eval '(define b 50) the-global-environment)
 	      (eval 'b the-global-environment)))
 
-(test* "eval-apply2"
+(test* "eval-apply2 define procedure"
        110
        (begin (eval '(define (test a b) (+ a b)) the-global-environment)
 	      (eval '(test 10 100) the-global-environment)))
+
+(test* "eval-apply3 quote" 'a
+       (eval '(quote a) the-global-environment))
+
+(test* "eval-apply4 if" 1
+       (begin (eval '(if true 1 2) the-global-environment)))
+
+(test* "eval-apply5 if" 2
+       (eval '(if false 1 2) the-global-environment))
+
+(test* "eval-apply6 lambda" 100
+       (eval '((lambda (x) (* x x)) 10) the-global-environment))
+
+(test* "eval-apply7 lambda def" 15
+       (begin (eval '(define f (lambda (x y) (+ x y))) the-global-environment)
+	      (eval '(f 10 5) the-global-environment)))
+
+(test* "eval-apply8 recursice" 3628800
+       (begin (eval '(define (fact n)
+		       (if (= n 0) 1 (* n (fact (- n 1))))) 
+		    the-global-environment)
+	      (eval '(fact 10) the-global-environment)))
+(test* "eval-apply9 begin" 10
+       (eval '(begin (+ 10 5) (- 20 10)) the-global-environment))
+
+(test* "eval-apply10 cond" 'OK
+       (begin 
+	 (eval '(define (assoc k l)
+		  (if (null? l) false
+		      (if (eq? k (car (car l)))
+			  (car l)
+			  (assoc k (cdr l))))) the-global-environment)
+	 (eval '(cond ((assoc 'b '((a 100) (b 10))) 'OK)
+		      (else 'NG)) the-global-environment)))
+(test* "eval-apply11 let" 110
+       (eval '(let ((a 10) (b 100))
+	       (+ a b)) the-global-environment)) 
 (test-end)
 ;;(driver-loop)
+

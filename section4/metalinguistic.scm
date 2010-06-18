@@ -314,7 +314,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
   (cadr exp))
 
 (define (let-body exp)
-  (caddr exp))
+  (cddr exp))
 
 (define (first-let-param params)
   (car params))
@@ -355,18 +355,22 @@ evalは値を得るため、環境から変数を探すひつようがある。
 		 (list (make-lambda vars body))
 		 (cons (make-lambda vars body) vals)))))
 
-(define (make-let var val body)
-  (list 'let (list var val) body))
+(define (make-let params body)
+  (cons 'let 
+	(cons params body)))
+
 ;; 4.7
 ;; let*->nested-lets
 (define (let*? exp) (tagged-list? exp 'let*))
 
 (define (let*->nested-lets exp)
   (define (let*-iter params body)
-    (if (null? params) body
-	(list 'let 
-	      (list (car params))
-	      (let*-iter (cdr params) body))))
+    (cond ((null? params) body)
+	  ((null? (cdr params))
+	   (cons 'let (cons (list (car params)) body)))
+	  (else
+	   (make-let (list (car params))
+		     (list (let*-iter (cdr params) body))))))
   (let*-iter (let-params exp) (let-body exp)))
 
 
@@ -396,6 +400,8 @@ evalは値を得るため、環境から変数を探すひつようがある。
   (put 'eval 'cond eval-cond)
   (put 'eval 'or eval-or)
   (put 'eval 'and eval-and)
+  (put 'eval 'let eval-let)
+  (put 'eval 'let* eval-let*)
 )
 
 (install-eval-package)
@@ -524,7 +530,8 @@ evalは値を得るため、環境から変数を探すひつようがある。
 	(list '* *)
 	(list '- -)
 	(list '/ /)
-	(list 'map map)
+	(list 'not not)
+;;	(list 'map map)
 	;; ...
 	))
 
@@ -567,3 +574,94 @@ evalは値を得るため、環境から変数を探すひつようがある。
 
 (define the-global-environment (setup-environment))
 
+
+;; 解析器の分離
+;; 解析器を分離するとはどういうことか?
+
+(define (eval exp env)
+  ((analyze exp) env))
+
+(define (analyze exp)
+  (cond ((self-evaluating? exp)
+	 (analyze-self-evaluating exp))
+	((quoted? exp) (analyze-quoted exp))
+	((variable? exp) (analyze-variable exp))
+	((assignment? exp) (analyze-assignement exp))
+	((definition? exp) (analyze-definition exp))
+	((if? exp) (analyze-if exp))
+	((lambda? exp) (analyze-lambda exp))
+	((begin? exp) (analyze-sequence (begin-actions exp)))
+	((cond? exp) (analyze (cond->if exp)))
+	((application? exp) (analyze-application exp))
+	(else 
+	 (error "Unknown expression type -- ANALYZE" exp))))
+
+(define (analyze-self-evaluating exp) 
+  (lambda (env) exp))
+
+(define (analyze-quoted exp)
+  (let ((qval (text-of-quotation exp)))
+    (lambda (env) qval)))
+
+(define (analyze-variable exp)
+  (lambda (env) (lookup-variable-value exp env)))
+
+(define (analyze-assignement exp)
+  (let ((var (assignment-variable exp))
+	(vproc (analyze (assignment-value exp))))
+    (lambda (env) (set-variable-value! var (vproc env) env)
+	    'ok)))
+
+(define (analyze-definition exp)
+  (let ((var (definition-variable exp))
+	(vproc (analyze (definition-value exp))))
+    (lambda (env) 
+      (define-variable! var (vproc env) env)
+      'ok)))
+
+(define (analyze-if exp)
+  (let ((pproc (analyze (if-predicate exp)))
+	(cproc (analyze (if-consequent exp)))
+	(aproc (analyze (if-alternative exp))))
+    (lambda (env)
+      (if (true? (pproc env))
+	  (cproc env)
+	  (aproc env)))))
+		 
+(define (analyze-lambda exp)
+  (let ((vars (lambda-parameters exp))
+	(bproc (analyze-sequence (lambda-body exp))))
+    (lambda (env) (make-procedure vars bproc env))))
+
+(define (analyze-sequence exps)
+  (define (sequentially proc1 proc2)
+    (lambda (env) (proc1 env) (proc2 env)))
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+	first-proc
+	(loop (sequentially first-proc (car rest-procs))
+	      (cdr rest-procs))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+	(error "Empty sequence -- ANALYZE"))
+    (loop (car procs) (cdr procs))))
+
+(define (analyze-application exp)
+  (let ((fproc (analyze (operator exp)))
+	(aprocs (map analyze (operands exp))))
+    (lambda (env)
+      (execute-application (fproc env)
+			   (map (lambda (aproc) (aproc env))
+				aprocs)))))
+
+(define (execute-application proc args)
+  (cond ((primitive-procedure? proc)
+	 (apply-primitive-procedure proc args))
+	((compound-procedure? proc)
+	 ((procedure-body proc)
+	  (extend-environment (procedure-parameters proc)
+			      args
+			      (procedure-environment proc))))
+	(else
+	 (error
+	  "Unknown procedure type -- EXECUTE-APPLICATION" proc))))
