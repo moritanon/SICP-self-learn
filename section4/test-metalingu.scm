@@ -328,6 +328,35 @@
 (test* "eval-apply11 let" 110
        (eval '(let ((a 10) (b 100))
 	       (+ a b)) the-global-environment)) 
+
+(test* "eval-apply12 Y" 3628800
+       (begin 
+     (eval '(define Y
+          (lambda (X)
+            ((lambda (proc)
+              (X (lambda (arg) ((proc proc) arg))))
+             (lambda (proc)
+               (X (lambda (arg) ((proc proc) arg)))))))
+          the-global-environment)
+     (eval '((Y (lambda (func)
+              (lambda (n)
+            (if (= n 0)
+                1
+                (* n (func (- n 1))))))) 10)
+           the-global-environment)))
+              
+(test* "eval-apply13 Y2" 3628800
+       (eval '(((lambda (X)
+         ((lambda (proc)
+            (X (lambda (arg) ((proc proc) arg))))
+          (lambda (proc)
+            (X (lambda (arg) ((proc proc) arg))))))
+           (lambda (func)
+         (lambda (n)
+           (if (= n 0)
+               1
+               (* n (func (- n 1))))))) 10)
+         the-global-environment)) 
 (test-end)
 ;;(driver-loop)
 

@@ -592,6 +592,7 @@ evalは値を得るため、環境から変数を探すひつようがある。
 	((lambda? exp) (analyze-lambda exp))
 	((begin? exp) (analyze-sequence (begin-actions exp)))
 	((cond? exp) (analyze (cond->if exp)))
+	((let? exp) (analyze (let->combination exp)))
 	((application? exp) (analyze-application exp))
 	(else 
 	 (error "Unknown expression type -- ANALYZE" exp))))
